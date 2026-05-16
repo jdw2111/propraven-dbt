@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  parse:
+    # Just verifies the dbt_project.yml, packages.yml, and SQL files all parse.
+    # Doesn't connect to Snowflake — uses dbt's `--no-partial-parse` + a stubbed
+    # profile so we catch macro and Jinja errors at PR time.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dbt-snowflake
+        run: pip install "dbt-snowflake~=1.8" "dbt-core~=1.8"
+
+      - name: Write stub profile
+        run: |
+          mkdir -p ~/.dbt
+          cat <<'YAML' > ~/.dbt/profiles.yml
+          propraven:
+            target: ci
+            outputs:
+              ci:
+                type: snowflake
+                account: stub
+                user: stub
+                password: stub
+                role: stub
+                database: PROPRAVEN
+                warehouse: stub
+                schema: ci
+                threads: 1
+          YAML
+
+      - name: dbt parse
+        run: dbt parse --no-version-check

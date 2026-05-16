@@ -1,0 +1,5 @@
+# propraven-dbt has zero hard dependencies on other dbt packages — it only
+# needs what dbt-core already provides. If you want freshness alerting or
+# fancier helpers, dbt-labs/dbt_utils is the safe default to add in your
+# importing project.
+packages: []

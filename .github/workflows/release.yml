@@ -1,0 +1,38 @@
+name: Release
+
+# Tagged releases get a GitHub Release with auto-generated notes. dbt Hub
+# polls GitHub Releases — so cutting a tag here is the only step needed to
+# publish a new version to https://hub.getdbt.com/propraven/propraven/.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify dbt_project.yml version matches tag
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          TAG_VERSION="${TAG#v}"
+          PROJECT_VERSION=$(grep '^version:' dbt_project.yml | head -1 | sed -E 's/version: *"?([^"]+)"?/\1/')
+          if [ "$TAG_VERSION" != "$PROJECT_VERSION" ]; then
+            echo "Tag $TAG_VERSION doesn't match dbt_project.yml version $PROJECT_VERSION"
+            exit 1
+          fi
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF#refs/tags/}" \
+            --generate-notes \
+            --title "${GITHUB_REF#refs/tags/}"

@@ -1,0 +1,39 @@
+name: "propraven"
+version: "0.1.0"
+config-version: 2
+require-dbt-version: [">=1.7.0", "<2.0.0"]
+
+# Profile is supplied by the importing project — `propraven` is a package,
+# not a stand-alone project.
+profile: "propraven"
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# Customers override these in their dbt_project.yml. The defaults assume
+# they imported the PROPRAVEN_CORE share into a database called `PROPRAVEN`
+# in their own Snowflake account (this is the standard Marketplace flow).
+vars:
+  propraven_database: "PROPRAVEN"
+  propraven_silver_schema: "SILVER"
+  propraven_meta_schema: "META"
+  propraven_gold_schema: "GOLD"
+  propraven_insurance_schema: "INSURANCE"
+
+models:
+  propraven:
+    +materialized: view
+    +schema: propraven
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table

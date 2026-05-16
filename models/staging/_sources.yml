@@ -1,0 +1,165 @@
+version: 2
+
+# Sources declared here mirror the canonical tables shared via the
+# PROPRAVEN_CORE, PROPRAVEN_OWNER_GRAPH, PROPRAVEN_INSURANCE, and
+# PROPRAVEN_PREVIEW Snowflake Marketplace listings.
+#
+# When a customer accepts the share, Snowflake mounts it as a read-only
+# database (default name "PROPRAVEN"). Adjust `propraven_database` in your
+# dbt_project.yml vars if your share lands under a different name.
+
+sources:
+  - name: propraven_silver
+    database: "{{ var('propraven_database') }}"
+    schema: "{{ var('propraven_silver_schema') }}"
+    description: >
+      Normalized layer. One row per canonical PropRaven entity. Stable
+      PRPV_* identifiers survive county refreshes and APN re-issuances.
+    loaded_at_field: LAST_REFRESHED_AT
+    freshness:
+      warn_after: { count: 48, period: hour }
+      error_after: { count: 168, period: hour }
+    tables:
+      - name: PARCEL
+        description: 230M+ U.S. parcels with stable PRPV_PARCEL_ID.
+        columns:
+          - name: PRPV_PARCEL_ID
+            description: Stable PropRaven parcel identifier.
+            tests: [unique, not_null]
+          - name: PRPV_GEOGRAPHY_ID
+            tests: [not_null]
+          - name: APN
+            description: County-issued parcel number; may collide across counties.
+          - name: STATE_FIPS
+            tests: [not_null]
+          - name: COUNTY_FIPS
+          - name: LOT_SIZE_ACRES
+
+      - name: PROPERTY
+        description: Physical property attributes per parcel.
+        columns:
+          - name: PRPV_PARCEL_ID
+            tests:
+              - unique
+              - not_null
+              - relationships:
+                  to: source('propraven_silver','PARCEL')
+                  field: PRPV_PARCEL_ID
+          - name: PROPERTY_TYPE_CLASS
+            description: SFR, MFR, COMMERCIAL, INDUSTRIAL, LAND, etc.
+          - name: YEAR_BUILT
+          - name: BUILDING_SQFT
+
+      - name: TAX
+        description: Per-year tax-roll assessments. Composite key (parcel_id, tax_year).
+        columns:
+          - name: PRPV_PARCEL_ID
+            tests: [not_null]
+          - name: TAX_YEAR
+            tests: [not_null]
+          - name: ASSESSED_TOTAL_VALUE
+          - name: TAX_AMOUNT
+
+      - name: PERMIT
+        description: 39.9M building permits matched to parcels.
+        columns:
+          - name: PRPV_PERMIT_ID
+            tests:
+              - unique
+              - not_null
+          - name: PRPV_PARCEL_ID
+            tests:
+              - relationships:
+                  to: source('propraven_silver','PARCEL')
+                  field: PRPV_PARCEL_ID
+          - name: PERMIT_TYPE
+          - name: PERMIT_STATUS
+          - name: FILED_DATE
+          - name: ESTIMATED_COST
+
+      - name: TRANSACTION
+        description: 27.5M+ matched deed transfers. Use SALE_PRICE > 0 + IS_ARM_LENGTH for real sales.
+        columns:
+          - name: PRPV_TRANSACTION_ID
+            tests:
+              - unique
+              - not_null
+          - name: PRPV_PARCEL_ID
+            tests:
+              - relationships:
+                  to: source('propraven_silver','PARCEL')
+                  field: PRPV_PARCEL_ID
+          - name: SALE_DATE
+          - name: SALE_PRICE
+          - name: IS_ARM_LENGTH
+          - name: GRANTOR_NAME
+          - name: GRANTEE_NAME
+
+      - name: GEOGRAPHY
+        description: Full Census hierarchy (state → CBSA → county → tract → block).
+        columns:
+          - name: PRPV_GEOGRAPHY_ID
+            tests: [unique, not_null]
+          - name: CBSA_CODE
+          - name: STATE_FIPS
+          - name: COUNTY_FIPS
+
+      - name: OWNER
+        description: Per-parcel current-owner mapping. Joins to OWNER_GRAPH for entity rollup.
+        columns:
+          - name: PRPV_PARCEL_ID
+            tests: [not_null]
+          - name: PRPV_OWNER_ENTITY_ID
+          - name: OWNER_NAME
+
+      - name: LOAN
+        description: Active mortgage liens per parcel.
+        columns:
+          - name: PRPV_LOAN_ID
+            tests: [unique, not_null]
+          - name: PRPV_PARCEL_ID
+          - name: LENDER_NAME
+          - name: ORIGINATION_AMOUNT
+
+      - name: ADDRESS
+        description: Mailing + situs address rows.
+        columns:
+          - name: PRPV_PARCEL_ID
+
+  - name: propraven_meta
+    database: "{{ var('propraven_database') }}"
+    schema: "{{ var('propraven_meta_schema') }}"
+    description: Lineage, freshness, and entity-dictionary side tables.
+    tables:
+      - name: SOURCE_LINEAGE
+        description: One row per SILVER entity with refresh cadence + source row counts.
+        columns:
+          - name: SILVER_ENTITY
+            tests: [unique, not_null]
+          - name: REFRESH_CADENCE
+          - name: LAST_REFRESHED_AT
+          - name: SOURCE_AS_OF
+          - name: ROW_COUNT
+
+      - name: ENTITY_DICTIONARY
+        description: Schema introspection for the share.
+        columns:
+          - name: ENTITY_NAME
+            tests: [unique, not_null]
+          - name: ENTITY_LAYER
+          - name: PRIMARY_KEY
+          - name: EXPECTED_ROW_COUNT
+
+  - name: propraven_gold
+    database: "{{ var('propraven_database') }}"
+    schema: "{{ var('propraven_gold_schema') }}"
+    description: >
+      Pre-computed signals. Optional — only present when your share includes
+      the Owner Graph or Intelligence listings.
+    tables:
+      - name: ABSENTEE
+      - name: INSTITUTIONAL
+      - name: RECENT_TRANSFER
+      - name: PORTFOLIO
+      - name: DISTRESS
+      - name: LENDER_EXPOSURE
