@@ -10,6 +10,12 @@ Drop it into any dbt project that has the PropRaven share mounted and you get:
 - A `check_propraven_freshness` operation that surfaces stale silver entities
 - A `generate_propraven_sources` codegen-style macro that re-emits the sources block when the share's table list changes
 
+## Documentation
+
+- Developer hub: https://propraven.com/developers
+- Hosted MCP server: https://propraven.com/docs/mcp
+- REST API v1 reference: https://propraven.com/docs/v1
+
 ## Requirements
 
 - dbt-core 1.7+
